@@ -4,7 +4,7 @@
 */
 
 /*
-    Code for taks 4-6
+    Code for extension 2
 */
 
 #include <iostream> // Header file for input and output operations
@@ -13,6 +13,21 @@
 
 using namespace std;
 
+// Function to draw chessboard grid and annotate corners
+void drawChessboardGrid(cv::Mat& image, const cv::Size& boardSize, const vector<cv::Point2f>& corners) {
+    // Draw grid lines
+    for (int i = 0; i < boardSize.height - 1; ++i) {
+        cv::line(image, corners[i * boardSize.width], corners[(i + 1) * boardSize.width - 1], cv::Scalar(255, 0, 0), 2);
+    }
+    for (int i = 0; i < boardSize.width - 1; ++i) {
+        cv::line(image, corners[i], corners[(boardSize.height - 1) * boardSize.width + i], cv::Scalar(255, 0, 0), 2);
+    }
+
+    // Annotate corners
+    for (size_t i = 0; i < corners.size(); ++i) {
+        cv::circle(image, corners[i], 5, cv::Scalar(0, 255, 0), -1);
+    }
+}
 
 int main() {
     // Read calibration parameters from file
@@ -23,7 +38,7 @@ int main() {
     }
 
     cv::Mat cameraMatrix(3, 3, CV_64F); // Initialize camera matrix
-    cv::Mat distCoeffs(8, 1, CV_64F); // Initialize distortion coefficients
+    cv::Mat distCoeffs(5, 1, CV_64F); // Initialize distortion coefficients
     double rms; // Initialize reprojection error
 
     string line;
@@ -40,9 +55,9 @@ int main() {
                 inFile >> distCoeffs.at<double>(i); // Read distortion coefficients values
             }
         } 
-        // if (line.find("Reprojection error:") != string::npos) { // If line contains reprojection error data
-        //     inFile >> rms; // Read reprojection error value
-        // }
+        if (line.find("Reprojection error:") != string::npos) { // If line contains reprojection error data
+            inFile >> rms; // Read reprojection error value
+        }
     }
 
     // Close file
@@ -61,7 +76,7 @@ int main() {
     vector<cv::Point3f> objectPoints;
     for (int y = 0; y < chessboardSize.height; ++y) {
         for (int x = 0; x < chessboardSize.width; ++x) {
-            objectPoints.push_back(cv::Point3f(x * squareSize, y * squareSize, 0)); // Generate 3D object points for chessboard corners
+            objectPoints.push_back(cv::Point3f(x * squareSize, y * squareSize, 0)); // Create object points
         }
     }
 
@@ -85,39 +100,39 @@ int main() {
     virtualObjectPoints.push_back(cv::Point3f(boardCenterX + 1, boardCenterY - 1, 0)); // Base point 4
 
     // Video capture
-    cv::VideoCapture cap(0); // Open default camera (index 0)
-    if (!cap.isOpened()) { // Check if camera is opened successfully
+    cv::VideoCapture cap(0);
+    if (!cap.isOpened()) { // If camera is not opened
         cerr << "Error: Unable to open camera" << endl; // Display error message
         return -1; // Return error code
     }
 
-    while (true) {
+    while (true) { // Infinite loop
         // Capturing the frames
         cv::Mat frame;
-        cap >> frame; // Read a frame from the camera
-        
+        cap >> frame; // Capture frame from camera
+
         // Convert frame to grayscale
         cv::Mat gray;
-        cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY); // Convert frame to grayscale
+        cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
 
         // Find chessboard corners
         vector<cv::Point2f> corners;
-        bool patternFound = cv::findChessboardCorners(gray, chessboardSize, corners); // Find chessboard corners in the grayscale image
+        bool patternFound = cv::findChessboardCorners(gray, chessboardSize, corners); // Find corners
 
-        if (patternFound) {
+        if (patternFound) { // If chessboard pattern found
             // Refine corner locations
             cv::cornerSubPix(gray, corners, cv::Size(11, 11), cv::Size(-1, -1), cv::TermCriteria(cv::TermCriteria::EPS + cv::TermCriteria::MAX_ITER, 30, 0.001));
 
-            // Draw corners on the image
-            cv::drawChessboardCorners(frame, chessboardSize, cv::Mat(corners), patternFound);
+            // Draw chessboard grid and annotate corners
+            drawChessboardGrid(frame, chessboardSize, corners);
 
             // Estimate pose using solvePnP
             cv::Mat rvec, tvec;
-            cv::solvePnP(objectPoints, corners, cameraMatrix, distCoeffs, rvec, tvec); // Estimate pose using solvePnP
+            cv::solvePnP(objectPoints, corners, cameraMatrix, distCoeffs, rvec, tvec);
 
             // Project 3D points to image plane
             vector<cv::Point2f> projectedPoints;
-            cv::projectPoints(axesPoints, rvec, tvec, cameraMatrix, distCoeffs, projectedPoints); // Project 3D points to image plane
+            cv::projectPoints(axesPoints, rvec, tvec, cameraMatrix, distCoeffs, projectedPoints);
 
             // Draw 3D axes
             cv::line(frame, projectedPoints[0], projectedPoints[1], cv::Scalar(0, 0, 255), 2);  // x-axis (red)
@@ -126,7 +141,7 @@ int main() {
 
             // Project 3D points to image plane for virtual object visualization
             vector<cv::Point2f> projectedVirtualObjectPoints;
-            cv::projectPoints(virtualObjectPoints, rvec, tvec, cameraMatrix, distCoeffs, projectedVirtualObjectPoints); // Project 3D points to image plane
+            cv::projectPoints(virtualObjectPoints, rvec, tvec, cameraMatrix, distCoeffs, projectedVirtualObjectPoints);
 
             // Draw lines connecting projected points to form the virtual object (pyramid)
             cv::line(frame, projectedVirtualObjectPoints[0], projectedVirtualObjectPoints[1], cv::Scalar(0, 0, 255), 2);  // Line 1
@@ -141,13 +156,12 @@ int main() {
             // Print rotation and translation vectors
             cout << "Rotation vector: " << rvec << endl;
             cout << "Translation vector: " << tvec << endl;
-
         }
 
-        cv::imshow("Frame", frame); // Display the frame
+        cv::imshow("Frame", frame); // Display frame
 
         // Break the loop if 'q' is pressed
-        if (cv::waitKey(1) == 'q') {
+        if (cv::waitKey(1) == 'q') { // If 'q' key is pressed
             break; // Exit the loop
         }
     }
